@@ -1,18 +1,18 @@
 import numpy as np
 
-def evaluate(env, policy, n_episodes=100):
+def evaluate(env, policy, n_episodes=10):
     episode_rewards = []
     for ep_i in range(n_episodes):
 
-        obs, _ = env.reset()
+        obs = env.reset()
         done = False
-        rew = 0.0
+        ep_rew = 0.0
         while not done:
             action, _ = policy(obs)
-            obs, rew, done, trunc, info = env.step(action)
+            obs, rew, done, info = env.step(action)
 
-            rew += -info['bike_shortage']
+            ep_rew += rew
 
-        episode_rewards.append(rew)
+        episode_rewards.append(ep_rew)
 
     return np.mean(episode_rewards)

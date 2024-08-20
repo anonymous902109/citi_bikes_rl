@@ -10,31 +10,26 @@ import numpy as np
 class CitiBikes(gym.Env):
 
     def __init__(self):
-        self.gym_env = Env(scenario="citi_bike", topology='toy.5s_6t', start_tick=0, durations=1440, snapshot_resolution=10)
+        self.gym_env = Env(scenario="citi_bike", topology='toy.5s_6t', start_tick=0, durations=1440, snapshot_resolution=30)
 
-        self.features = ["bikes",
+        self.features = ["bikes", "capacity", "fulfillment", "shortage", "failed_return", "trip_requirement",
                          "decision_type", "decision_station_idx", "frame_idx",
-                         "holiday", "temperature", "weather", "weekday"]
+                         "holiday", "temperature", "weather", "weekday", "tick"]
 
-        self.station_features = self.features[0:1]
-        self.decision_features = self.features[1:4]
-        self.shared_features = self.features[4:]
+        self.station_features = self.features[0:6]
+        self.decision_features = self.features[6:9]
+        self.shared_features = self.features[9:13]
+        self.tick = self.features[13:]
 
         self.num_stations = len(self.gym_env.current_frame.stations)
         self.max_bike_transfer = 10
 
-        self.state_dim = self.num_stations * len(self.station_features) + len(self.decision_features) +  len(self.shared_features)
+        self.state_dim = self.num_stations * len(self.station_features) + len(self.decision_features) + len(self.shared_features) + len(self.tick)
 
         self.action_space = MultiDiscrete([self.num_stations, self.num_stations, self.max_bike_transfer])
         self.observation_space = Box(low=np.array([0]*self.state_dim), high=np.array([np.inf]*self.state_dim), shape=(self.state_dim, ))
 
         self.max_penalty = sum([station.capacity for station in self.gym_env.current_frame.stations])
-
-        self.penalties = {
-            'IMPOSSIBLE_ACTION': -10,
-            'ZERO ACTION': 0,
-            'UNNECESSARY ACTION': -100
-        }
 
         self.decision_types = {
             'NONE': 0,
@@ -43,15 +38,13 @@ class CitiBikes(gym.Env):
         }
 
     def step(self, action):
-        start_station, end_station, number = action
-        action = Action(
-            from_station_idx=start_station,
-            to_station_idx=end_station,
-            number=number
-        )
-
-        if self.obs[0] == self.decision_types['SUPPLY']:
-            action = None
+        if action is not None:
+            start_station, end_station, number = action
+            action = Action(
+                from_station_idx=start_station,
+                to_station_idx=end_station,
+                number=number
+            )
 
         metric, decision_event, is_done = self.gym_env.step(action)
 
@@ -64,20 +57,17 @@ class CitiBikes(gym.Env):
         return obs, rew, is_done, False, {'bike_shortage': metric['bike_shortage']}
 
     def calculate_reward(self, metric, obs, action):
+        num_bikes = 0
+        if action is not None:
+            num_bikes = action.number
+
+        stations = self.gym_env.current_frame.stations
+
         bike_shortage = metric['bike_shortage']
-        rew = -bike_shortage
+        trip_requirements = metric['trip_requirements']
+        fulfillment = sum([s.fulfillment for s in stations])
 
-        # # check if action was possible if it wants to move more bikes than there are at the station
-        # bikes_start = self.gym_env.current_frame.stations[action.from_station_idx].bikes
-        # transfer = action.number
-        #
-        # # if agent wasn't supposed to act because transfering more than they can
-        # if bikes_start < transfer:
-        #     rew += self.penalties['IMPOSSIBLE_ACTION']
-        #
-        # if transfer == 0:
-        #     rew += self.penalties['ZERO ACTION']
-
+        rew = -(bike_shortage*10.0) / trip_requirements - 0.01 * num_bikes
         return rew
 
     def reset(self, seed=0):
@@ -104,20 +94,20 @@ class CitiBikes(gym.Env):
         if decision_event is not None:
             obs.append(decision_event.station_idx)
             obs.append(decision_event.frame_index)
-
-            for station_id in range(self.num_stations):
-                obs.append(decision_event.action_scope[station_id])
-
         else:
             obs.append(-1)
             obs.append(self.gym_env.frame_index)
-            for s in stations:
-                obs.append(-1)
-                # obs.append(s.bikes)
+
+        # adding features for each station
+        for station_id in range(self.num_stations):
+            for f in self.station_features:
+                obs.append(getattr(stations[station_id], f))
 
         # adding features same for all stations such as weather
         for f in self.shared_features: # tick cannot be added this way
             obs.append(getattr(stations[0], f))
+
+        obs.append(self.gym_env.tick)
 
         return obs
 

@@ -1,10 +1,7 @@
 import heapq
 import random
 
-from maro.simulator.scenarios.citi_bike.common import DecisionType, Action
-
-
-ACTION_SPACE = [[0, 4], [0, 4], [0, 10]]
+ACTION_SPACE = [[0, 2], [0, 2], [0, 10]]
 
 
 def random_policy(obs):
@@ -12,9 +9,13 @@ def random_policy(obs):
     to_station = random.randint(*ACTION_SPACE[1])
     number = random.randint(*ACTION_SPACE[2])
 
-    action = [from_station, to_station, number]
+    action = [[from_station, to_station, number]]
 
     return action, None
+
+def noop_policy(obs):
+    return [None], None
+
 
 def greedy_policy(obs):
     decision_event = obs[0]
@@ -32,7 +33,7 @@ def greedy_policy(obs):
                 heapq.heappop(top_k_demands)
 
         max_reposition, target_station_idx = random.choice(top_k_demands)
-        action = [obs[1], target_station_idx, max_reposition]
+        action = [[obs[1], target_station_idx, max_reposition]]
         return action, None
 
     else:
@@ -48,7 +49,5 @@ def greedy_policy(obs):
                 heapq.heappop(top_k_supplies)
 
         max_reposition, source_idx = random.choice(top_k_supplies)
-        action = [source_idx, obs[1], max_reposition]
+        action = [[source_idx, obs[1], max_reposition]]
         return action, None
-
-    return None
