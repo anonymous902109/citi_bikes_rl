@@ -1,10 +1,10 @@
 import gymnasium as gym
-import maro
-from gymnasium.spaces.multi_discrete import MultiDiscrete
 from gymnasium.spaces import Box
-from maro.simulator import Env
-from maro.simulator.scenarios.citi_bike.common import Action, DecisionType
+from gymnasium.spaces.multi_discrete import MultiDiscrete
 import numpy as np
+from maro.simulator.scenarios.citi_bike.common import Action, DecisionEvent, DecisionType
+
+from maro.simulator import Env
 
 
 class CitiBikes(gym.Env):
@@ -24,10 +24,15 @@ class CitiBikes(gym.Env):
         self.num_stations = len(self.gym_env.current_frame.stations)
         self.max_bike_transfer = 10
 
-        self.state_dim = self.num_stations * len(self.station_features) + len(self.decision_features) + len(self.shared_features) + len(self.tick)
+        self.state_dim = self.num_stations * len(self.station_features) + \
+                         len(self.decision_features) + \
+                         len(self.shared_features) + \
+                         len(self.tick)
 
         self.action_space = MultiDiscrete([self.num_stations, self.num_stations, self.max_bike_transfer])
-        self.observation_space = Box(low=np.array([0]*self.state_dim), high=np.array([np.inf]*self.state_dim), shape=(self.state_dim, ))
+        self.observation_space = Box(low=-np.inf,
+                                     high=np.inf,
+                                     shape=(self.state_dim,))
 
         self.max_penalty = sum([station.capacity for station in self.gym_env.current_frame.stations])
 
@@ -37,7 +42,14 @@ class CitiBikes(gym.Env):
             'DEMAND': 2
         }
 
+    def process_action(self, action):
+        if len(action) == 1:
+            action = action[0]
+
+        return action
+
     def step(self, action):
+        action = self.process_action(action)
         if action is not None:
             start_station, end_station, number = action
             action = Action(
